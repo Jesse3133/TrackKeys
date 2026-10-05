@@ -1,0 +1,7 @@
+{
+  "vms": ["Win11-A", "Win11-B", "Win11-C", "Win11-D"],
+  "toggle_hotkey": "ctrl+alt+f",
+  "mouse": { "enabled": true, "flush_hz": 200 },
+  "start_enabled": false,
+  "reconcile_seconds": 3
+}

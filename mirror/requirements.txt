@@ -1,0 +1,7 @@
+# TrackKeys Mirror has NO pip dependencies for capture (uses ctypes + Win32).
+#
+# It DOES require `vboxapi`, which is NOT on PyPI -- it ships with the
+# VirtualBox SDK and is registered into your Python by the SDK's installer.
+# See README.md ("Install the VirtualBox SDK").
+#
+# Python 3.9+ (64-bit, matching your VirtualBox build) on Windows 11.
