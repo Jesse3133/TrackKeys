@@ -357,15 +357,23 @@ staged:
 
 ## 15. Roadmap / milestones
 
-- **M1 — Injection core:** `vboxctl` connect + single-VM `putScancodes` +
-  absolute mouse. *(in progress)*
-- **M2 — Capture core:** low-level keyboard+mouse hooks → normalized events.
-- **M3 — Single-VM mirror:** wire capture → one target; toggle; held-key
-  release.
-- **M4 — Fan-out to 4 VMs:** multi-target, mouse coalescing, lifecycle.
-- **M5 — Hardening:** reconnection, resolution changes, soak testing, control
-  UI.
-- **M6 (optional) — Raw Input backend:** exact E0/E1 fidelity; mouse via
+Core engine (the original CLI milestones) is done and verified on one VM:
+injection, capture, single-VM mirror, multi-target fan-out, lifecycle, and the
+absolute-mouse + multi-monitor + cursor-visibility fixes.
+
+Desktop-app track:
+
+- **GUI-M1 — Engine split:** orchestrator extracted into `engine.py` (threaded,
+  command/status queues, COM confined to the worker thread); CLI `mirror.py`
+  re-based on it. *(done)*
+- **GUI-M2 — Basic window:** `gui.pyw` (no console) with live VM discovery +
+  checkboxes, monitor dropdown, mouse toggle, start/stop, status, log. *(done)*
+- **GUI-M3 — Polish:** settings persistence, live counters, start/stop VMs from
+  the UI.
+- **GUI-M4 — Tray + icon:** system-tray presence, app icon, clean shutdown.
+- **GUI-M5 — Packaging:** single `.exe` via PyInstaller (verify `vboxapi`
+  bundling); VirtualBox itself still required on the target.
+- **Optional — Raw Input backend:** exact E0/E1 key fidelity; mouse via
   `WM_INPUT`.
 
 ---

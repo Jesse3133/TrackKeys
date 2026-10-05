@@ -97,6 +97,17 @@ def enumerate_monitors(user32):
     return monitors
 
 
+def list_monitors():
+    """Convenience for callers (e.g. the GUI) that just want the monitor list
+    without constructing a Capture. Returns [(left, top, width, height), ...].
+    """
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.EnumDisplayMonitors.argtypes = [c_void_p, c_void_p, MONITORENUMPROC,
+                                           c_void_p]
+    user32.EnumDisplayMonitors.restype = wintypes.BOOL
+    return enumerate_monitors(user32)
+
+
 def _hiword_signed(dword):
     """High 16 bits of a DWORD as a signed short (for wheel deltas)."""
     return ctypes.c_short((dword >> 16) & 0xFFFF).value

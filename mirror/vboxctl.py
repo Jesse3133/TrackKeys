@@ -157,5 +157,17 @@ class VBoxController:
         except Exception:
             return False
 
+    def list_machines(self):
+        """Return [(name, is_running), ...] for every registered VM."""
+        out = []
+        for m in self.vbox.machines:
+            try:
+                out.append((m.name,
+                            m.state == self.const.MachineState_Running))
+            except Exception:
+                pass
+        out.sort(key=lambda t: t[0].lower())
+        return out
+
     def make_target(self, name):
         return Target(self, name)

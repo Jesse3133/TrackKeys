@@ -76,6 +76,19 @@ On startup the app prints how many monitors it found and which one it's using.
 
 ## Run
 
+### Desktop app (recommended)
+
+Double-click **`gui.pyw`** (Windows launches it with `pythonw.exe`, so there's
+no console window), or:
+```
+pythonw gui.pyw
+```
+It connects to VirtualBox, lists your VMs with checkboxes, lets you pick the
+mouse source monitor, and starts/stops mirroring with a button (or Ctrl+Alt+F).
+No config-file editing needed.
+
+### Command line
+
 1. Start the 4 VMs (windowed or, preferably, headless).
 2. On the host:
    ```
@@ -124,8 +137,11 @@ use it to drive machines that aren't yours.
 | File | Role |
 |---|---|
 | `DESIGN.md` | Architecture & rationale |
+| `gui.pyw` | Desktop GUI (no console) |
+| `engine.py` | Orchestrator engine (threaded; used by GUI and CLI) |
 | `events.py` | Normalized event types |
 | `capture.py` | Win32 low-level keyboard/mouse hooks |
 | `vboxctl.py` | VirtualBox COM injection (per-VM targets) |
-| `mirror.py` | Orchestrator / entry point |
+| `mirror.py` | Command-line entry point |
+| `mousetest.py` / `capturetest.py` | Injection / capture diagnostics |
 | `config.example.json` | Config template |
