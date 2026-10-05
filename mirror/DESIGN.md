@@ -371,9 +371,12 @@ Desktop-app track:
 - **GUI-M3 — Polish:** settings persistence (`gui_settings.json`), live rate
   counters (keys/s, moves/s), and start/power-off VMs from the UI (optionally
   headless), on a dedicated thread so the mirror loop never blocks. *(done)*
-- **GUI-M4 — Tray + icon:** system-tray presence, app icon, clean shutdown.
-- **GUI-M5 — Packaging:** single `.exe` via PyInstaller (verify `vboxapi`
-  bundling); VirtualBox itself still required on the target.
+- **GUI-M4 — Tray + icon:** programmatic app/tray icon (`icon.py`), system-tray
+  presence with Show/Toggle/Quit, close-to-tray, clean shutdown. Tray is
+  optional (degrades gracefully without `pystray`/`pillow`). *(done)*
+- **GUI-M5 — Packaging:** `build.bat` builds a single windowed `.exe` via
+  PyInstaller with the `vboxapi`/pywin32 hidden imports; VirtualBox itself is
+  still required on the target. *(done)*
 - **Optional — Raw Input backend:** exact E0/E1 key fidelity; mouse via
   `WM_INPUT`.
 

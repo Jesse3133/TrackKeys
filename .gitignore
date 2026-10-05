@@ -1,4 +1,8 @@
 *.pyc
+*.spec
 __pycache__/
+build/
 config.json
+dist/
 gui_settings.json
+icon.ico

@@ -16,6 +16,7 @@ WINDOWS + VIRTUALBOX ONLY.
 
 import json
 import os
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -52,6 +53,8 @@ class App:
         self.mirroring = False
         self._applied_monitor = None
         self._ready = False
+        self.tray = None
+        self._icon_img = None
         self.settings = load_settings()
         self._saved_selected = set(self.settings.get("selected_vms", []))
 
@@ -64,8 +67,10 @@ class App:
         self._populate_monitors()
         self._apply_settings_pre_start()
 
+        self._set_window_icon()
         self.engine.start()
         self._ready = True
+        self._start_tray()
         self.root.after(100, self._poll)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -371,10 +376,73 @@ class App:
         self.log.see("end")
         self.log.configure(state="disabled")
 
+    # -- icon / tray -------------------------------------------------------
+    def _set_window_icon(self):
+        try:
+            from PIL import ImageTk
+            from icon import make_image
+            self._icon_img = ImageTk.PhotoImage(make_image(64))
+            self.root.iconphoto(True, self._icon_img)
+        except Exception:
+            pass  # icon is cosmetic; keep going without it
+
+    def _start_tray(self):
+        try:
+            import pystray
+            from icon import make_image
+        except Exception:
+            self._append_log("System tray unavailable "
+                             "(pip install pystray pillow).")
+            return
+        image = make_image(64)
+
+        def toggle_text(_item):
+            return "Stop mirroring" if self.mirroring else "Start mirroring"
+
+        menu = pystray.Menu(
+            pystray.MenuItem("Show window", self._tray_show, default=True),
+            pystray.MenuItem(toggle_text, self._tray_toggle),
+            pystray.MenuItem("Quit", self._tray_quit),
+        )
+        self.tray = pystray.Icon("TrackKeysMirror", image,
+                                 "TrackKeys Mirror", menu)
+        threading.Thread(target=self.tray.run, name="tray",
+                         daemon=True).start()
+
+    def _tray_show(self, icon=None, item=None):
+        self.root.after(0, self._show_window)
+
+    def _tray_toggle(self, icon=None, item=None):
+        # engine calls are thread-safe; safe from the tray thread.
+        self.engine.set_enabled(not self.mirroring)
+
+    def _tray_quit(self, icon=None, item=None):
+        self.root.after(0, self._real_quit)
+
+    def _show_window(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
     # -- shutdown ----------------------------------------------------------
     def _on_close(self):
         self._save_settings()
+        if self.tray is not None:
+            # Hide to tray instead of quitting; quit from the tray menu.
+            self.root.withdraw()
+            self._append_log("Minimized to tray. Use the tray icon to restore "
+                             "or quit.")
+        else:
+            self._real_quit()
+
+    def _real_quit(self):
+        self._save_settings()
         self.status_lbl.configure(text="stopping...")
+        if self.tray is not None:
+            try:
+                self.tray.stop()
+            except Exception:
+                pass
         self.engine.stop()
         self.root.after(700, self.root.destroy)
 

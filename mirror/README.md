@@ -103,6 +103,28 @@ list (optionally headless), and your selections, monitor, and window size are
    **Ctrl+Alt+F** again to stop. **Ctrl+C** in the console quits (and releases
    any held keys in the guests first).
 
+## System tray
+
+With `pystray` + `pillow` installed, the app shows a **tray icon**. Closing the
+window **minimizes to the tray** (mirroring keeps running); the tray menu has
+**Show window**, **Start/Stop mirroring**, and **Quit**. Without those packages
+the app still runs — closing the window just quits normally.
+
+## Build a standalone .exe
+
+To produce `dist\TrackKeysMirror.exe` (no Python needed on the target, but
+VirtualBox still is):
+
+```
+pip install pyinstaller pystray pillow
+build.bat
+```
+
+`build.bat` generates the icon and runs PyInstaller with the hidden imports
+`vboxapi` needs. If the built `.exe` can't import `vboxapi`, confirm
+`python -c "import vboxapi"` works in the same environment you built from, and
+that VirtualBox is installed on the target machine.
+
 ## Acceptable use
 
 For mirroring **your own** input to **your own** VMs on a machine you control.
@@ -141,6 +163,8 @@ use it to drive machines that aren't yours.
 | `DESIGN.md` | Architecture & rationale |
 | `gui.pyw` | Desktop GUI (no console) |
 | `engine.py` | Orchestrator engine (threaded; used by GUI and CLI) |
+| `icon.py` | Programmatic app/tray icon + `.ico` generator |
+| `build.bat` | PyInstaller build script (→ single `.exe`) |
 | `events.py` | Normalized event types |
 | `capture.py` | Win32 low-level keyboard/mouse hooks |
 | `vboxctl.py` | VirtualBox COM injection (per-VM targets) |
