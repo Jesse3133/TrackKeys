@@ -108,6 +108,16 @@ use it to drive machines that aren't yours.
   `vboxctl.send_mouse_abs` (convention noted in DESIGN.md §16).
 - Cursor misaligned in a guest → confirm Guest Additions is active and the
   absolute pointing device is enabled.
+- **Mouse works but no cursor icon is drawn in the guest** (clicks/hover land,
+  but you can't see the pointer) → the mirror *is* working; VirtualBox just
+  isn't painting the pointer because, with mouse integration, the host draws it
+  only where the real host pointer hovers the VM window — and when the VM is
+  driven via the API (headless / unfocused / host pointer on another monitor),
+  nobody paints it. Force the **guest** to draw its own cursor: in each guest,
+  **Control Panel → Mouse → Pointer Options → enable "Display pointer trails"**
+  (shortest setting), or set a custom/large pointer scheme. This is the
+  recommended setup for the multi-VM fan-out, since one host pointer can't hover
+  all the VM windows at once.
 
 ## Files
 

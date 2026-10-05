@@ -259,6 +259,13 @@ and flush on the timer.
 
 1. Install **Guest Additions** in each of the 4 VMs; enable the absolute
    pointing device (default when Additions are present).
+   - Also enable a **software-drawn cursor** in each guest (Mouse → Pointer
+     Options → "Display pointer trails", shortest). With mouse integration the
+     host only paints the pointer where the real host cursor hovers a VM
+     window, so an API-driven / headless / unfocused VM shows no cursor icon
+     even though positioning works. Forcing the guest to draw its own cursor
+     makes it visible — required for the multi-VM fan-out, where one host
+     pointer can't hover every VM window.
 2. Start the 4 VMs (windowed or headless).
 3. Run `mirror.py` on the host with a config listing the 4 VM names.
 4. **Keep host focus on your local app — not on a VM window.** Injection goes

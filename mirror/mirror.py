@@ -164,6 +164,10 @@ class Mirror:
             elif target.alive and not running:
                 print("[mirror] %s stopped; detaching" % name)
                 target.close()
+            elif target.alive:
+                # Pick up guest resolution changes (e.g. Additions auto-resize)
+                # so absolute mouse mapping stays correct.
+                target.refresh_resolution()
 
     # -- run loop ----------------------------------------------------------
     def run(self, capture):
