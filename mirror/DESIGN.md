@@ -368,8 +368,9 @@ Desktop-app track:
   re-based on it. *(done)*
 - **GUI-M2 — Basic window:** `gui.pyw` (no console) with live VM discovery +
   checkboxes, monitor dropdown, mouse toggle, start/stop, status, log. *(done)*
-- **GUI-M3 — Polish:** settings persistence, live counters, start/stop VMs from
-  the UI.
+- **GUI-M3 — Polish:** settings persistence (`gui_settings.json`), live rate
+  counters (keys/s, moves/s), and start/power-off VMs from the UI (optionally
+  headless), on a dedicated thread so the mirror loop never blocks. *(done)*
 - **GUI-M4 — Tray + icon:** system-tray presence, app icon, clean shutdown.
 - **GUI-M5 — Packaging:** single `.exe` via PyInstaller (verify `vboxapi`
   bundling); VirtualBox itself still required on the target.

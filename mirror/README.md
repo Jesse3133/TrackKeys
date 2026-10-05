@@ -85,7 +85,9 @@ pythonw gui.pyw
 ```
 It connects to VirtualBox, lists your VMs with checkboxes, lets you pick the
 mouse source monitor, and starts/stops mirroring with a button (or Ctrl+Alt+F).
-No config-file editing needed.
+No config-file editing needed. You can also **start/power-off each VM** from the
+list (optionally headless), and your selections, monitor, and window size are
+**remembered between runs** (saved to `gui_settings.json`).
 
 ### Command line
 

@@ -1,20 +1,23 @@
 """
-TrackKeys Mirror -- desktop GUI (M2).
+TrackKeys Mirror -- desktop GUI.
 
 A graphical front-end over engine.Engine. Launch it with no console window by
 double-clicking (Windows runs .pyw with pythonw.exe) or:
 
     pythonw gui.pyw
 
-Pick which VirtualBox VMs to mirror, choose the mouse source monitor, and start
-/ stop mirroring -- no config file editing, no terminal. Mirroring can also be
-toggled anywhere with Ctrl+Alt+F.
+Pick which VirtualBox VMs to mirror, start/stop VMs, choose the mouse source
+monitor, and start/stop mirroring -- no config file editing, no terminal.
+Mirroring can also be toggled anywhere with Ctrl+Alt+F. Selections are
+remembered between runs.
 
 WINDOWS + VIRTUALBOX ONLY.
 """
 
+import json
+import os
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 from engine import Engine
 
@@ -29,6 +32,17 @@ ACCENT = "#5b8def"
 DANGER = "#e35d6a"
 SUCCESS = "#4caf7d"
 
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "gui_settings.json")
+
+
+def load_settings():
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
 
 class App:
     def __init__(self, root):
@@ -37,11 +51,21 @@ class App:
         self.vm_vars = {}          # vm name -> BooleanVar
         self.mirroring = False
         self._applied_monitor = None
+        self._ready = False
+        self.settings = load_settings()
+        self._saved_selected = set(self.settings.get("selected_vms", []))
+
+        # rate tracking
+        self._last_keys = 0
+        self._last_moves = 0
+        self._last_time = None
 
         self._build_ui()
         self._populate_monitors()
+        self._apply_settings_pre_start()
 
         self.engine.start()
+        self._ready = True
         self.root.after(100, self._poll)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -50,13 +74,12 @@ class App:
         r = self.root
         r.title("TrackKeys Mirror")
         r.configure(bg=BG)
-        r.geometry("720x640")
-        r.minsize(600, 520)
+        r.geometry("740x660")
+        r.minsize(620, 540)
 
         outer = tk.Frame(r, bg=BG)
         outer.pack(fill="both", expand=True, padx=16, pady=14)
 
-        # Header: title + status
         head = tk.Frame(outer, bg=BG)
         head.pack(fill="x")
         tk.Label(head, text="TrackKeys Mirror", bg=BG, fg=TEXT,
@@ -85,7 +108,6 @@ class App:
                   bg=PANEL_ALT, fg=TEXT, relief="flat", bd=0, padx=10, pady=3,
                   cursor="hand2").pack(side="right")
 
-        # Scrollable checkbox list
         canvas = tk.Canvas(left, bg=PANEL, highlightthickness=0)
         sb = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)
         self.vm_frame = tk.Frame(canvas, bg=PANEL)
@@ -97,7 +119,8 @@ class App:
         canvas.pack(side="left", fill="both", expand=True, padx=(12, 0),
                     pady=(0, 10))
         sb.pack(side="right", fill="y", pady=(0, 10))
-        self._vm_placeholder()
+        tk.Label(self.vm_frame, text="Looking for VMs...", bg=PANEL,
+                 fg=TEXT_DIM).pack(anchor="w", pady=6)
 
         # Right: controls
         right = tk.Frame(body, bg=BG)
@@ -114,10 +137,18 @@ class App:
                                     activebackground=BORDER)
         self.monitor_menu["menu"].configure(bg=PANEL_ALT, fg=TEXT)
         self.monitor_menu.pack(anchor="w", pady=(4, 12), fill="x")
+        self.monitor_var.trace_add("write", self._on_monitor_change)
 
         self.mouse_var = tk.BooleanVar(value=True)
         tk.Checkbutton(right, text="Mirror mouse", variable=self.mouse_var,
                        command=self._on_mouse_toggle, bg=BG, fg=TEXT,
+                       selectcolor=PANEL_ALT, activebackground=BG,
+                       activeforeground=TEXT, highlightthickness=0,
+                       bd=0).pack(anchor="w")
+
+        self.headless_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(right, text="Start VMs headless", variable=self.headless_var,
+                       command=self._on_headless_toggle, bg=BG, fg=TEXT,
                        selectcolor=PANEL_ALT, activebackground=BG,
                        activeforeground=TEXT, highlightthickness=0,
                        bd=0).pack(anchor="w", pady=(0, 14))
@@ -131,13 +162,11 @@ class App:
         tk.Label(right, text="or press Ctrl+Alt+F anywhere", bg=BG, fg=TEXT_DIM,
                  font=("Helvetica", 8)).pack(anchor="w", pady=(4, 16))
 
-        # Stats
         self.stats_lbl = tk.Label(right, text="keys: 0   moves: 0", bg=BG,
                                   fg=TEXT_DIM, font=("Helvetica", 9),
                                   justify="left")
         self.stats_lbl.pack(anchor="w")
 
-        # Log pane
         tk.Label(outer, text="LOG", bg=BG, fg=TEXT_DIM,
                  font=("Helvetica", 9, "bold")).pack(anchor="w", pady=(12, 2))
         self.log = tk.Text(outer, height=8, bg=PANEL_ALT, fg=TEXT, relief="flat",
@@ -145,12 +174,6 @@ class App:
                            font=("Consolas", 9), wrap="word", padx=8, pady=6)
         self.log.pack(fill="both", expand=False)
         self.log.configure(state="disabled")
-
-    def _vm_placeholder(self):
-        for w in self.vm_frame.winfo_children():
-            w.destroy()
-        tk.Label(self.vm_frame, text="Looking for VMs...", bg=PANEL,
-                 fg=TEXT_DIM, font=("Helvetica", 10)).pack(anchor="w", pady=6)
 
     def _populate_monitors(self):
         try:
@@ -169,6 +192,44 @@ class App:
             menu.add_command(label=label,
                              command=lambda lbl=label: self.monitor_var.set(lbl))
 
+    def _apply_settings_pre_start(self):
+        """Restore saved settings onto the widgets / engine before start()."""
+        s = self.settings
+        self.mouse_var.set(bool(s.get("mouse_enabled", True)))
+        self.headless_var.set(bool(s.get("launch_headless", False)))
+        self.engine.mouse_enabled = self.mouse_var.get()
+        self.engine.launch_type = "headless" if self.headless_var.get() else "gui"
+
+        saved_monitor = s.get("monitor", "primary")
+        for label, value in self.monitor_map.items():
+            if value == saved_monitor:
+                self.monitor_var.set(label)
+                break
+
+        geom = s.get("window")
+        if geom:
+            try:
+                self.root.geometry(geom)
+            except Exception:
+                pass
+
+    # -- settings ----------------------------------------------------------
+    def _save_settings(self):
+        if not self._ready:
+            return
+        data = {
+            "selected_vms": self._selected_vms(),
+            "monitor": self.monitor_map.get(self.monitor_var.get(), "primary"),
+            "mouse_enabled": self.mouse_var.get(),
+            "launch_headless": self.headless_var.get(),
+            "window": self.root.winfo_geometry(),
+        }
+        try:
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+        except Exception:
+            pass
+
     # -- actions -----------------------------------------------------------
     def _selected_vms(self):
         return [n for n, v in self.vm_vars.items() if v.get()]
@@ -185,11 +246,35 @@ class App:
                 self._applied_monitor = monitor
             self.engine.set_targets(names)
             self.engine.set_enabled(True)
+            self._save_settings()
         else:
             self.engine.set_enabled(False)
 
     def _on_mouse_toggle(self):
         self.engine.set_mouse_enabled(self.mouse_var.get())
+        self._save_settings()
+
+    def _on_headless_toggle(self):
+        self.engine.set_launch_type(self.headless_var.get())
+        self._save_settings()
+
+    def _on_monitor_change(self, *_):
+        if not self._ready:
+            return
+        monitor = self.monitor_map.get(self.monitor_var.get(), "primary")
+        if self.mirroring and monitor != self._applied_monitor:
+            self.engine.set_monitor(monitor)
+            self._applied_monitor = monitor
+        self._save_settings()
+
+    def _launch_vm(self, name):
+        self.engine.launch_vm(name)
+
+    def _poweroff_vm(self, name):
+        if messagebox.askyesno("Power off",
+                               "Hard power-off %s?\n(Unsaved work in the guest "
+                               "will be lost.)" % name):
+            self.engine.poweroff_vm(name)
 
     # -- status polling ----------------------------------------------------
     def _poll(self):
@@ -210,14 +295,27 @@ class App:
         elif kind == "enabled":
             self._set_mirroring(s["value"])
         elif kind == "stats":
-            self._set_mirroring(s["enabled"])
-            alive = sum(1 for _, a, _, _ in s["targets"] if a)
-            total = len(s["targets"])
-            self.stats_lbl.configure(
-                text="keys: %d   moves: %d   VMs: %d/%d attached"
-                % (s["keys"], s["moves"], alive, total))
+            self._update_stats(s)
         elif kind == "stopped":
             self._append_log("Engine stopped.")
+
+    def _update_stats(self, s):
+        import time
+        self._set_mirroring(s["enabled"])
+        now = time.monotonic()
+        kps = mps = 0
+        if self._last_time is not None:
+            dt = now - self._last_time
+            if dt > 0:
+                kps = max(0, round((s["keys"] - self._last_keys) / dt))
+                mps = max(0, round((s["moves"] - self._last_moves) / dt))
+        self._last_keys, self._last_moves, self._last_time = (
+            s["keys"], s["moves"], now)
+        alive = sum(1 for _, a, _, _ in s["targets"] if a)
+        total = len(s["targets"])
+        self.stats_lbl.configure(
+            text="keys: %d (%d/s)\nmoves: %d (%d/s)\nVMs: %d/%d attached"
+            % (s["keys"], kps, s["moves"], mps, alive, total))
 
     def _rebuild_vms(self, vms):
         prev = {n: v.get() for n, v in self.vm_vars.items()}
@@ -229,17 +327,32 @@ class App:
                      bg=PANEL, fg=TEXT_DIM).pack(anchor="w", pady=6)
             return
         for name, running in vms:
-            var = tk.BooleanVar(value=prev.get(name, False))
+            default = prev[name] if name in prev else (name in self._saved_selected)
+            var = tk.BooleanVar(value=default)
             self.vm_vars[name] = var
             row = tk.Frame(self.vm_frame, bg=PANEL)
-            row.pack(fill="x", anchor="w")
-            tk.Checkbutton(row, text=name, variable=var, bg=PANEL, fg=TEXT,
+            row.pack(fill="x", anchor="w", pady=1)
+            tk.Checkbutton(row, text=name, variable=var,
+                           command=self._save_settings, bg=PANEL, fg=TEXT,
                            selectcolor=PANEL_ALT, activebackground=PANEL,
                            activeforeground=TEXT, highlightthickness=0,
                            bd=0).pack(side="left")
-            tk.Label(row, text="running" if running else "stopped", bg=PANEL,
-                     fg=SUCCESS if running else TEXT_DIM,
-                     font=("Helvetica", 8)).pack(side="right", padx=8)
+            if running:
+                tk.Button(row, text="Power off",
+                          command=lambda n=name: self._poweroff_vm(n),
+                          bg=PANEL, fg=DANGER, relief="flat", bd=0,
+                          font=("Helvetica", 8), cursor="hand2"
+                          ).pack(side="right", padx=(6, 8))
+                tk.Label(row, text="running", bg=PANEL, fg=SUCCESS,
+                         font=("Helvetica", 8)).pack(side="right")
+            else:
+                tk.Button(row, text="Start",
+                          command=lambda n=name: self._launch_vm(n),
+                          bg=PANEL, fg=ACCENT, relief="flat", bd=0,
+                          font=("Helvetica", 8), cursor="hand2"
+                          ).pack(side="right", padx=(6, 8))
+                tk.Label(row, text="stopped", bg=PANEL, fg=TEXT_DIM,
+                         font=("Helvetica", 8)).pack(side="right")
 
     def _set_mirroring(self, value):
         self.mirroring = value
@@ -260,6 +373,7 @@ class App:
 
     # -- shutdown ----------------------------------------------------------
     def _on_close(self):
+        self._save_settings()
         self.status_lbl.configure(text="stopping...")
         self.engine.stop()
         self.root.after(700, self.root.destroy)

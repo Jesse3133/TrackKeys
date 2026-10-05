@@ -136,6 +136,43 @@ class Target:
         self._safe_unlock()
 
 
+def _new_manager():
+    """Create a fresh VirtualBox manager. Used by power operations that run on
+    their own thread (own COM apartment), separate from the engine's manager.
+    """
+    from vboxapi import VirtualBoxManager
+    mgr = VirtualBoxManager(None, None)
+    return mgr, mgr.getVirtualBox(), mgr.constants
+
+
+def launch_vm(name, launch_type="gui"):
+    """Start a registered VM ("gui" or "headless"). Blocks until launched."""
+    mgr, vbox, const = _new_manager()
+    machine = vbox.findMachine(name)
+    session = mgr.getSessionObject(vbox)
+    # VERSION NOTE: some vboxapi builds want "" instead of [] for the
+    # environment-changes argument.
+    progress = machine.launchVMProcess(session, launch_type, [])
+    progress.waitForCompletion(-1)
+    session.unlockMachine()
+
+
+def poweroff_vm(name):
+    """Hard power-off a running VM (equivalent to pulling the plug)."""
+    mgr, vbox, const = _new_manager()
+    machine = vbox.findMachine(name)
+    session = mgr.getSessionObject(vbox)
+    machine.lockMachine(session, const.LockType_Shared)
+    try:
+        progress = session.console.powerDown()
+        progress.waitForCompletion(-1)
+    finally:
+        try:
+            session.unlockMachine()
+        except Exception:
+            pass
+
+
 class VBoxController:
     """Connects to the local VirtualBox and manages Targets."""
 

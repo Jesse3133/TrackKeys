@@ -18,6 +18,7 @@ import queue
 import threading
 import time
 
+import vboxctl
 from events import KeyEvent, MouseMove, MouseButton, MouseWheel
 from vboxctl import VBoxController
 
@@ -40,6 +41,7 @@ class Engine:
         self.flush_hz = 200
         self.reconcile_seconds = 3.0
         self.target_names = []
+        self.launch_type = "gui"   # "gui" or "headless" for launch_vm
 
         # Runtime state (worker thread only).
         self.controller = None
@@ -93,6 +95,15 @@ class Engine:
 
     def refresh_vms(self):
         self._cmd.put(("refresh", None))
+
+    def set_launch_type(self, headless):
+        self._cmd.put(("launch_type", "headless" if headless else "gui"))
+
+    def launch_vm(self, name):
+        self._cmd.put(("launch", name))
+
+    def poweroff_vm(self, name):
+        self._cmd.put(("poweroff", name))
 
     # ======================================================================
     # Worker thread
@@ -202,6 +213,43 @@ class Engine:
                 self._restart_capture()
             elif cmd == "refresh":
                 self._emit_vms()
+            elif cmd == "launch_type":
+                self.launch_type = arg
+            elif cmd == "launch":
+                self._spawn_power("launch", arg)
+            elif cmd == "poweroff":
+                self._spawn_power("poweroff", arg)
+
+    def _spawn_power(self, action, name):
+        """Run a VM power op on its own thread (own COM apartment) so the
+        mirroring loop never blocks on VM boot/shutdown."""
+        self._emit("log", msg="%s %s..." % (action, name))
+
+        def work():
+            com = False
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                com = True
+            except Exception:
+                pass
+            try:
+                if action == "launch":
+                    vboxctl.launch_vm(name, self.launch_type)
+                else:
+                    vboxctl.poweroff_vm(name)
+            except Exception as exc:  # noqa: BLE001
+                self._emit("error", msg="%s %s failed: %s" % (action, name, exc))
+            finally:
+                if com:
+                    try:
+                        import pythoncom
+                        pythoncom.CoUninitialize()
+                    except Exception:
+                        pass
+            self._cmd.put(("refresh", None))
+
+        threading.Thread(target=work, name="vmpower", daemon=True).start()
 
     def _apply_targets(self, names):
         names = list(names)
