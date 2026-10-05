@@ -74,6 +74,27 @@ class MSLLHOOKSTRUCT(ctypes.Structure):
 
 
 HOOKPROC = CFUNCTYPE(c_ssize_t, c_int, c_size_t, c_void_p)
+MONITORENUMPROC = CFUNCTYPE(wintypes.BOOL, c_void_p, c_void_p,
+                            POINTER(wintypes.RECT), c_void_p)
+
+SM_CXSCREEN = 0
+SM_CYSCREEN = 1
+
+
+def enumerate_monitors(user32):
+    """Return a list of (left, top, width, height) for each monitor, in the
+    order Windows enumerates them. The primary monitor always has origin (0, 0).
+    """
+    monitors = []
+
+    def _cb(hmon, hdc, lprc, lparam):
+        r = lprc.contents
+        monitors.append((r.left, r.top, r.right - r.left, r.bottom - r.top))
+        return 1
+
+    cb = MONITORENUMPROC(_cb)
+    user32.EnumDisplayMonitors(None, None, cb, None)
+    return monitors
 
 
 def _hiword_signed(dword):
@@ -93,8 +114,12 @@ class Capture:
               the hook callback.
     """
 
-    def __init__(self, on_event):
+    def __init__(self, on_event, monitor="primary"):
         self.on_event = on_event
+        # Which monitor's area maps onto the VM screen. "primary" or a 1-based
+        # index into enumerate_monitors(); keep the mouse on this monitor while
+        # mirroring.
+        self._monitor = monitor
         self._thread = None
         self._thread_id = None
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -102,8 +127,9 @@ class Capture:
         self._mouse_proc = None
         self._kbd_hook = None
         self._mouse_hook = None
-        self._vx = self._vy = 0
-        self._vw = self._vh = 1
+        # Source-monitor rect used to normalize the pointer to 0.0-1.0.
+        self._src_left = self._src_top = 0
+        self._src_w = self._src_h = 1
 
         u = self._user32
         u.SetWindowsHookExW.argtypes = [c_int, HOOKPROC, c_void_p, wintypes.DWORD]
@@ -120,6 +146,9 @@ class Capture:
         u.PostThreadMessageW.restype = wintypes.BOOL
         u.GetSystemMetrics.argtypes = [c_int]
         u.GetSystemMetrics.restype = c_int
+        u.EnumDisplayMonitors.argtypes = [c_void_p, c_void_p, MONITORENUMPROC,
+                                          c_void_p]
+        u.EnumDisplayMonitors.restype = wintypes.BOOL
 
     # -- lifecycle ---------------------------------------------------------
     def start(self):
@@ -134,16 +163,41 @@ class Capture:
             self._thread.join(timeout=2)
 
     # -- internal ----------------------------------------------------------
-    def _refresh_virtual_screen(self):
-        g = self._user32.GetSystemMetrics
-        self._vx = g(SM_XVIRTUALSCREEN)
-        self._vy = g(SM_YVIRTUALSCREEN)
-        self._vw = max(1, g(SM_CXVIRTUALSCREEN))
-        self._vh = max(1, g(SM_CYVIRTUALSCREEN))
+    def _resolve_source_monitor(self):
+        """Pick the monitor whose area maps onto the VM screen."""
+        mons = enumerate_monitors(self._user32)
+
+        sel = self._monitor
+        if isinstance(sel, str) and sel.isdigit():
+            sel = int(sel)
+
+        chosen = None
+        if isinstance(sel, int):
+            idx = sel - 1  # config is 1-based
+            if 0 <= idx < len(mons):
+                chosen = mons[idx]
+        if chosen is None:  # "primary" (or bad index) -> monitor at origin
+            for m in mons:
+                if m[0] == 0 and m[1] == 0:
+                    chosen = m
+                    break
+        if chosen is None and mons:
+            chosen = mons[0]
+        if chosen is None:  # last resort: primary metrics
+            g = self._user32.GetSystemMetrics
+            chosen = (0, 0, max(1, g(SM_CXSCREEN)), max(1, g(SM_CYSCREEN)))
+
+        self._src_left, self._src_top, w, h = chosen
+        self._src_w = max(1, w)
+        self._src_h = max(1, h)
+        print("[capture] %d monitor(s) found; mirroring mouse from "
+              "origin=(%d,%d) size=%dx%d (keep the mouse on this monitor)"
+              % (len(mons), self._src_left, self._src_top,
+                 self._src_w, self._src_h))
 
     def _run(self):
         self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
-        self._refresh_virtual_screen()
+        self._resolve_source_monitor()
 
         # Keep references so the trampolines aren't garbage-collected.
         self._kbd_proc = HOOKPROC(self._on_keyboard)
@@ -190,8 +244,8 @@ class Capture:
 
     def _dispatch_mouse(self, msg, ms):
         if msg == WM_MOUSEMOVE:
-            nx = (ms.pt.x - self._vx) / self._vw
-            ny = (ms.pt.y - self._vy) / self._vh
+            nx = (ms.pt.x - self._src_left) / self._src_w
+            ny = (ms.pt.y - self._src_top) / self._src_h
             nx = min(1.0, max(0.0, nx))
             ny = min(1.0, max(0.0, ny))
             self.on_event(MouseMove(nx, ny))

@@ -29,7 +29,7 @@ VK_F = 0x46
 DEFAULT_CONFIG = {
     "vms": [],
     "toggle_hotkey": "ctrl+alt+f",
-    "mouse": {"enabled": True, "flush_hz": 200},
+    "mouse": {"enabled": True, "flush_hz": 200, "monitor": "primary"},
     "start_enabled": False,
     "reconcile_seconds": 3,
 }
@@ -41,6 +41,7 @@ class Mirror:
         self.enabled = bool(config.get("start_enabled", False))
         self.mouse_enabled = bool(config.get("mouse", {}).get("enabled", True))
         self.flush_hz = max(30, int(config.get("mouse", {}).get("flush_hz", 200)))
+        self.mouse_monitor = config.get("mouse", {}).get("monitor", "primary")
         self.reconcile_seconds = float(config.get("reconcile_seconds", 3))
 
         self.queue = queue.Queue()
@@ -218,7 +219,7 @@ def main():
 
     mirror = Mirror(cfg)
     mirror.connect()
-    capture = Capture(mirror.on_event)
+    capture = Capture(mirror.on_event, monitor=mirror.mouse_monitor)
     capture.start()
     mirror.run(capture)
 

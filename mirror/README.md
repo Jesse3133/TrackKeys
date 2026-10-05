@@ -65,6 +65,15 @@ VirtualBox Manager**:
 { "vms": ["Win11-A", "Win11-B", "Win11-C", "Win11-D"] }
 ```
 
+**Multi-monitor hosts:** the mouse is mirrored from **one** monitor (the
+"control monitor"), whose full area maps onto the VM screen. Keep the mouse on
+that monitor while mirroring. Choose it with `mouse.monitor`:
+```json
+{ "mouse": { "monitor": "primary" } }     // default: your primary monitor
+{ "mouse": { "monitor": 3 } }             // or a 1-based monitor index
+```
+On startup the app prints how many monitors it found and which one it's using.
+
 ## Run
 
 1. Start the 4 VMs (windowed or, preferably, headless).
