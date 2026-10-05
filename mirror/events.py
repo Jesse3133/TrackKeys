@@ -27,9 +27,17 @@ class KeyEvent:
 
 @dataclass
 class MouseMove:
-    """Pointer position normalized to 0.0-1.0 across the virtual screen."""
+    """A pointer movement.
+
+    nx, ny:  position normalized to 0.0-1.0 across the control monitor
+             (used for absolute positioning).
+    dx, dy:  raw pixel delta since the previous move (used for relative /
+             drag injection in hybrid and relative mouse modes).
+    """
     nx: float
     ny: float
+    dx: int = 0
+    dy: int = 0
 
 
 @dataclass

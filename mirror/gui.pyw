@@ -151,6 +151,13 @@ class App:
                        activeforeground=TEXT, highlightthickness=0,
                        bd=0).pack(anchor="w")
 
+        self.hybrid_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(right, text="Smooth drags (hybrid mouse)",
+                       variable=self.hybrid_var, command=self._on_hybrid_toggle,
+                       bg=BG, fg=TEXT, selectcolor=PANEL_ALT,
+                       activebackground=BG, activeforeground=TEXT,
+                       highlightthickness=0, bd=0).pack(anchor="w")
+
         self.headless_var = tk.BooleanVar(value=False)
         tk.Checkbutton(right, text="Start VMs headless", variable=self.headless_var,
                        command=self._on_headless_toggle, bg=BG, fg=TEXT,
@@ -202,7 +209,10 @@ class App:
         s = self.settings
         self.mouse_var.set(bool(s.get("mouse_enabled", True)))
         self.headless_var.set(bool(s.get("launch_headless", False)))
+        mode = s.get("mouse_mode", "hybrid")
+        self.hybrid_var.set(mode != "absolute")
         self.engine.mouse_enabled = self.mouse_var.get()
+        self.engine.mouse_mode = mode
         self.engine.launch_type = "headless" if self.headless_var.get() else "gui"
 
         saved_monitor = s.get("monitor", "primary")
@@ -226,6 +236,7 @@ class App:
             "selected_vms": self._selected_vms(),
             "monitor": self.monitor_map.get(self.monitor_var.get(), "primary"),
             "mouse_enabled": self.mouse_var.get(),
+            "mouse_mode": "hybrid" if self.hybrid_var.get() else "absolute",
             "launch_headless": self.headless_var.get(),
             "window": self.root.winfo_geometry(),
         }
@@ -261,6 +272,11 @@ class App:
 
     def _on_headless_toggle(self):
         self.engine.set_launch_type(self.headless_var.get())
+        self._save_settings()
+
+    def _on_hybrid_toggle(self):
+        self.engine.set_mouse_mode("hybrid" if self.hybrid_var.get()
+                                   else "absolute")
         self._save_settings()
 
     def _on_monitor_change(self, *_):

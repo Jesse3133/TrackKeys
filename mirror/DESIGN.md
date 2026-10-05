@@ -129,6 +129,28 @@ Three layers, cleanly separated:
 
 ## 6. Component design
 
+### 6.0 Mouse modes (absolute / hybrid / relative)
+
+The absolute pointing device gives perfect multi-VM position lockstep, but
+apps that track a **drag** by relative motion (right-drag to pan/rotate, many
+editors/games) derive wrong velocity from absolute input — so drags feel off.
+Disabling guest mouse integration (switching the guest to its relative PS/2
+mouse) fixes drags but loses absolute placement. To get both, the engine
+supports three modes (`mouse.mode`, default **hybrid**):
+
+- **absolute** — always `PutMouseEventAbsolute`. Lockstep; drags can feel off.
+- **hybrid** (default) — absolute while idle; while any button is held, send
+  **relative deltas** (`PutMouseEvent`) so drags feel native; re-assert the
+  absolute position on button release to re-sync every VM. Keeps lockstep,
+  because positions only need to match when not mid-drag.
+- **relative** — always relative deltas. Best drag feel, but cursors can drift
+  apart across VMs (no absolute re-sync).
+
+Relative deltas are derived from successive host cursor positions in the
+capture layer (`MouseMove.dx/dy`), so no new capture backend is needed. On a
+button press the engine anchors with one absolute event; drag moves are
+coalesced relative deltas; on release one absolute event re-syncs.
+
 ### 6.1 Capture layer (`capture.py`)
 
 Installs two Windows low-level hooks on a dedicated thread that runs its own

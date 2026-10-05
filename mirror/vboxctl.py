@@ -117,6 +117,15 @@ class Target:
         except Exception as exc:  # noqa: BLE001
             self._die("putMouseEventAbsolute", exc)
 
+    def send_mouse_rel(self, dx, dy, buttons, dz=0, dw=0):
+        """Relative movement (for drags / relative mouse mode)."""
+        if not self.alive:
+            return
+        try:
+            self.mouse.putMouseEvent(dx, dy, dz, dw, button_mask(buttons))
+        except Exception as exc:  # noqa: BLE001
+            self._die("putMouseEvent", exc)
+
     # -- lifecycle ---------------------------------------------------------
     def _die(self, where, exc):
         print("[vbox] %s on %s failed (%s); marking dead" % (where, self.name, exc))

@@ -38,6 +38,15 @@ class Engine:
         # Configuration (set before start(), or via commands afterwards).
         self.monitor = "primary"
         self.mouse_enabled = True
+        # "absolute": always absolute positioning (lockstep, but drags can feel
+        #             off because the guest derives drag velocity from absolute
+        #             input).
+        # "hybrid":   absolute when idle, relative deltas while a button is
+        #             held (native-feeling drags), re-sync to absolute on
+        #             release. Keeps multi-VM lockstep. (default)
+        # "relative": always relative deltas (best drag feel, but cursors can
+        #             drift apart across VMs).
+        self.mouse_mode = "hybrid"
         self.flush_hz = 200
         self.reconcile_seconds = 3.0
         self.target_names = []
@@ -54,7 +63,10 @@ class Engine:
         self.mnx = 0.5
         self.mny = 0.5
         self.buttons = set()
-        self.mouse_dirty = False
+        self.mouse_dirty = False        # pending absolute flush
+        self._rel_dx = 0                # accumulated relative delta
+        self._rel_dy = 0
+        self._rel_dirty = False         # pending relative flush
         self._key_count = 0
         self._move_count = 0
 
@@ -89,6 +101,9 @@ class Engine:
 
     def set_mouse_enabled(self, value):
         self._cmd.put(("mouse_enabled", bool(value)))
+
+    def set_mouse_mode(self, mode):
+        self._cmd.put(("mouse_mode", mode))
 
     def set_monitor(self, monitor):
         self._cmd.put(("monitor", monitor))
@@ -208,6 +223,9 @@ class Engine:
                 self._set_enabled(not self.enabled)
             elif cmd == "mouse_enabled":
                 self.mouse_enabled = arg
+            elif cmd == "mouse_mode":
+                if arg in ("absolute", "hybrid", "relative"):
+                    self.mouse_mode = arg
             elif cmd == "monitor":
                 self.monitor = arg
                 self._restart_capture()
@@ -287,8 +305,13 @@ class Engine:
             self._handle_key(ev)
         elif isinstance(ev, MouseMove):
             self.mnx, self.mny = ev.nx, ev.ny
-            self.mouse_dirty = True
             self._move_count += 1
+            if self._use_relative():
+                self._rel_dx += ev.dx
+                self._rel_dy += ev.dy
+                self._rel_dirty = True
+            else:
+                self.mouse_dirty = True
         elif isinstance(ev, MouseButton):
             self._handle_button(ev)
         elif isinstance(ev, MouseWheel):
@@ -323,6 +346,14 @@ class Engine:
             for t in self._alive_targets():
                 t.send_key(ev)
 
+    def _use_relative(self):
+        """True when the current move should be sent as a relative delta."""
+        if self.mouse_mode == "relative":
+            return True
+        if self.mouse_mode == "hybrid" and self.buttons:
+            return True
+        return False
+
     def _handle_button(self, ev):
         if not (self.enabled and self.mouse_enabled):
             return
@@ -330,8 +361,18 @@ class Engine:
             self.buttons.add(ev.button)
         else:
             self.buttons.discard(ev.button)
-        for t in self._alive_targets():
-            t.send_mouse_abs(self.mnx, self.mny, self.buttons)
+        # Drop any pending relative delta; the button event defines position.
+        self._rel_dx = self._rel_dy = 0
+        self._rel_dirty = False
+        if self.mouse_mode == "relative":
+            # Button state change without moving.
+            for t in self._alive_targets():
+                t.send_mouse_rel(0, 0, self.buttons)
+        else:
+            # Absolute anchors the press at the right spot (and, on release in
+            # hybrid, re-syncs all VMs to the exact position).
+            for t in self._alive_targets():
+                t.send_mouse_abs(self.mnx, self.mny, self.buttons)
 
     def _handle_wheel(self, ev):
         if not (self.enabled and self.mouse_enabled):
@@ -339,15 +380,27 @@ class Engine:
         dz = 0 if ev.horizontal else ev.steps
         dw = ev.steps if ev.horizontal else 0
         for t in self._alive_targets():
-            t.send_mouse_abs(self.mnx, self.mny, self.buttons, dz=dz, dw=dw)
+            if self._use_relative():
+                t.send_mouse_rel(0, 0, self.buttons, dz=dz, dw=dw)
+            else:
+                t.send_mouse_abs(self.mnx, self.mny, self.buttons, dz=dz, dw=dw)
 
     def _flush_mouse(self):
-        if not (self.enabled and self.mouse_enabled and self.mouse_dirty):
-            self.mouse_dirty = False
+        if not (self.enabled and self.mouse_enabled):
+            self.mouse_dirty = self._rel_dirty = False
+            self._rel_dx = self._rel_dy = 0
             return
-        for t in self._alive_targets():
-            t.send_mouse_abs(self.mnx, self.mny, self.buttons)
-        self.mouse_dirty = False
+        if self._rel_dirty and (self._rel_dx or self._rel_dy):
+            dx, dy = int(self._rel_dx), int(self._rel_dy)
+            for t in self._alive_targets():
+                t.send_mouse_rel(dx, dy, self.buttons)
+            self._rel_dx -= dx
+            self._rel_dy -= dy
+        self._rel_dirty = False
+        if self.mouse_dirty:
+            for t in self._alive_targets():
+                t.send_mouse_abs(self.mnx, self.mny, self.buttons)
+            self.mouse_dirty = False
 
     # -- policy ------------------------------------------------------------
     def _set_enabled(self, value):

@@ -21,7 +21,8 @@ from engine import Engine
 DEFAULT_CONFIG = {
     "vms": [],
     "toggle_hotkey": "ctrl+alt+f",
-    "mouse": {"enabled": True, "flush_hz": 200, "monitor": "primary"},
+    "mouse": {"enabled": True, "flush_hz": 200, "monitor": "primary",
+              "mode": "hybrid"},
     "start_enabled": False,
     "reconcile_seconds": 3,
 }
@@ -50,6 +51,7 @@ def main():
     engine.target_names = cfg["vms"]
     engine.monitor = mouse.get("monitor", "primary")
     engine.mouse_enabled = bool(mouse.get("enabled", True))
+    engine.mouse_mode = mouse.get("mode", "hybrid")
     engine.flush_hz = max(30, int(mouse.get("flush_hz", 200)))
     engine.reconcile_seconds = float(cfg.get("reconcile_seconds", 3))
     if cfg.get("start_enabled"):

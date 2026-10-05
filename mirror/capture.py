@@ -141,6 +141,9 @@ class Capture:
         # Source-monitor rect used to normalize the pointer to 0.0-1.0.
         self._src_left = self._src_top = 0
         self._src_w = self._src_h = 1
+        # Last absolute cursor position, for computing relative deltas.
+        self._last_x = None
+        self._last_y = None
 
         u = self._user32
         u.SetWindowsHookExW.argtypes = [c_int, HOOKPROC, c_void_p, wintypes.DWORD]
@@ -259,7 +262,13 @@ class Capture:
             ny = (ms.pt.y - self._src_top) / self._src_h
             nx = min(1.0, max(0.0, nx))
             ny = min(1.0, max(0.0, ny))
-            self.on_event(MouseMove(nx, ny))
+            if self._last_x is None:
+                dx = dy = 0
+            else:
+                dx = ms.pt.x - self._last_x
+                dy = ms.pt.y - self._last_y
+            self._last_x, self._last_y = ms.pt.x, ms.pt.y
+            self.on_event(MouseMove(nx, ny, dx, dy))
         elif msg == WM_LBUTTONDOWN:
             self.on_event(MouseButton("left", True))
         elif msg == WM_LBUTTONUP:

@@ -125,6 +125,16 @@ build.bat
 `python -c "import vboxapi"` works in the same environment you built from, and
 that VirtualBox is installed on the target machine.
 
+## Mouse drag feel (hybrid mode)
+
+With the absolute pointing device, click-and-drag can feel wrong in the guest
+(the guest derives drag velocity from absolute input). The app defaults to
+**hybrid** mouse mode: absolute positioning normally, but **relative** motion
+while a button is held (native-feeling drags), re-syncing to absolute on
+release — so drags feel right *and* all VMs stay in lockstep. Toggle it with
+**"Smooth drags (hybrid mouse)"** in the GUI, or `mouse.mode` in `config.json`
+(`"hybrid"` | `"absolute"` | `"relative"`).
+
 ## Acceptable use
 
 For mirroring **your own** input to **your own** VMs on a machine you control.
