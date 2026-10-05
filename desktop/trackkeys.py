@@ -94,6 +94,15 @@ def describe_key(key):
     return SPECIAL_LABELS.get(name, name), False, None
 
 
+def key_identity(key):
+    """A stable id for matching a release to its press (and deduping repeats)."""
+    if isinstance(key, keyboard.KeyCode):
+        if key.vk is not None:
+            return ("vk", key.vk)
+        return ("ch", key.char)
+    return ("key", getattr(key, "name", str(key)))
+
+
 def modifier_label(name):
     if name.startswith("ctrl"):
         return "Ctrl"
@@ -121,6 +130,9 @@ class TrackKeys:
         self.start_time = datetime.now()
         self.typed = ""
         self.held_mods = set()        # currently held modifier display names
+        self.held_keys = {}           # key_id -> log entry currently held down
+        self.total_hold_ms = 0.0      # sum of hold durations (for average)
+        self.hold_count = 0
         self.listener = None
 
         self._build_ui()
@@ -142,6 +154,7 @@ class TrackKeys:
                  font=("Helvetica", 18, "bold")).pack(anchor="w")
         tk.Label(outer,
                  text=("Recording keys pressed anywhere on this computer. "
+                       "Press Ctrl+Alt+P anywhere to pause or resume. "
                        "Data stays on this machine — nothing is sent anywhere."),
                  bg=BG, fg=TEXT_DIM, font=("Helvetica", 10),
                  wraplength=720, justify="left").pack(anchor="w", pady=(2, 12))
@@ -166,7 +179,8 @@ class TrackKeys:
         self.stat_vars = {}
         for i, (key, label) in enumerate([
             ("total", "Total keys"), ("chars", "Characters"),
-            ("kpm", "Keys / min"), ("time", "Session time"),
+            ("kpm", "Keys / min"), ("avghold", "Avg hold"),
+            ("time", "Session time"),
         ]):
             cell = tk.Frame(stats, bg=PANEL_ALT, highlightbackground=BORDER,
                             highlightthickness=1)
@@ -231,11 +245,12 @@ class TrackKeys:
                         relief="flat", font=("Helvetica", 8, "bold"))
         style.map("TK.Treeview", background=[("selected", ACCENT)])
 
-        cols = ("time", "key", "mods", "code")
+        cols = ("time", "key", "mods", "hold", "released")
         self.tree = ttk.Treeview(table_frame, columns=cols, show="headings",
                                  style="TK.Treeview")
-        for c, w, txt in [("time", 90, "Time"), ("key", 150, "Key"),
-                          ("mods", 140, "Modifiers"), ("code", 120, "Code")]:
+        for c, w, txt in [("time", 90, "Pressed"), ("key", 130, "Key"),
+                          ("mods", 120, "Modifiers"), ("hold", 90, "Hold (ms)"),
+                          ("released", 90, "Released")]:
             self.tree.heading(c, text=txt)
             self.tree.column(c, width=w, anchor="w")
         vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
@@ -276,18 +291,41 @@ class TrackKeys:
         if name in MODIFIER_NAMES:
             self.held_mods.discard(modifier_label(name))
 
+        kid = key_identity(key)
+        entry = self.held_keys.pop(kid, None)
+        if entry is None:
+            return  # release with no matching tracked press (e.g. during pause)
+
+        released = datetime.now()
+        hold_ms = (released - entry["time"]).total_seconds() * 1000.0
+        entry["release"] = released
+        entry["hold_ms"] = hold_ms
+        self.total_hold_ms += hold_ms
+        self.hold_count += 1
+        self._update_row(entry)
+
     def _handle_press(self, key, when):
         name = getattr(key, "name", None)
         if name in MODIFIER_NAMES:
             self.held_mods.add(modifier_label(name))
 
+        display, is_char, raw = describe_key(key)
+
+        # Global pause/resume hotkey: Ctrl+Alt+P (works even while paused).
+        if (raw is not None and raw.lower() == "p"
+                and "Ctrl" in self.held_mods and "Alt" in self.held_mods):
+            self.toggle_pause()
+            return
+
         if self.paused:
             return
 
-        display, is_char, raw = describe_key(key)
+        kid = key_identity(key)
+        # Ignore OS auto-repeat: a key already held fires repeated press events.
+        if kid in self.held_keys:
+            return
 
-        # Skip recording the standalone modifier key itself as a "key" row?
-        # We keep it -- users often want to see modifier presses too.
+        # Modifiers held alongside this key (excluding itself).
         mods = sorted(m for m in self.held_mods
                       if m != modifier_label(name or ""))
 
@@ -297,12 +335,17 @@ class TrackKeys:
         elif name:
             code = name
 
-        self.log.append({
-            "time": when,
+        entry = {
+            "time": when,        # press time
             "name": display,
             "mods": mods,
             "code": code,
-        })
+            "release": None,     # filled in on key release
+            "hold_ms": None,
+            "iid": None,         # tree row id, set by _append_row
+        }
+        self.log.append(entry)
+        self.held_keys[kid] = entry
         if len(self.log) > MAX_LOG:
             self.log = self.log[-MAX_LOG:]
 
@@ -327,7 +370,7 @@ class TrackKeys:
 
         self._render_live()
         self._render_top()
-        self._append_row(self.log[-1])
+        self._append_row(entry)
 
     # -- rendering ---------------------------------------------------------
     def _render_live(self):
@@ -345,18 +388,33 @@ class TrackKeys:
         self.top_lbl.configure(
             text="   ".join("%s ×%d" % (k, n) for k, n in top))
 
-    def _append_row(self, entry):
-        self.tree.insert("", 0, values=(
-            entry["time"].strftime("%H:%M:%S"),
+    def _row_values(self, entry):
+        hold = "held…" if entry["hold_ms"] is None else "%.0f" % entry["hold_ms"]
+        released = (entry["release"].strftime("%H:%M:%S.") +
+                    "%03d" % (entry["release"].microsecond // 1000)
+                    ) if entry["release"] else "—"
+        return (
+            entry["time"].strftime("%H:%M:%S.") +
+            "%03d" % (entry["time"].microsecond // 1000),
             entry["name"],
             " + ".join(entry["mods"]) if entry["mods"] else "—",
-            entry["code"],
-        ))
+            hold,
+            released,
+        )
+
+    def _append_row(self, entry):
+        entry["iid"] = self.tree.insert("", 0, values=self._row_values(entry))
         # Trim displayed rows to MAX_LOG.
         children = self.tree.get_children()
         if len(children) > MAX_LOG:
             for iid in children[MAX_LOG:]:
                 self.tree.delete(iid)
+
+    def _update_row(self, entry):
+        iid = entry.get("iid")
+        if not iid or not self.tree.exists(iid):
+            return  # row was trimmed away or never shown
+        self.tree.item(iid, values=self._row_values(entry))
 
     def _tick(self):
         self.stat_vars["total"].set(str(self.total))
@@ -365,6 +423,8 @@ class TrackKeys:
         mins = elapsed / 60.0
         kpm = round(self.total / mins) if mins > 0.02 else 0
         self.stat_vars["kpm"].set(str(kpm))
+        avg = (self.total_hold_ms / self.hold_count) if self.hold_count else 0
+        self.stat_vars["avghold"].set("%.0f ms" % avg)
         self.stat_vars["time"].set("%d:%02d" % (int(elapsed) // 60, int(elapsed) % 60))
         self.root.after(1000, self._tick)
 
@@ -390,6 +450,9 @@ class TrackKeys:
         self.log = []
         self.counts = Counter()
         self.typed = ""
+        self.held_keys = {}
+        self.total_hold_ms = 0.0
+        self.hold_count = 0
         self.start_time = datetime.now()
         self._render_live()
         self._render_top()
@@ -409,10 +472,13 @@ class TrackKeys:
         try:
             with open(path, "w", newline="", encoding="utf-8") as fh:
                 writer = csv.writer(fh)
-                writer.writerow(["timestamp", "key", "modifiers", "code"])
+                writer.writerow(["pressed", "released", "hold_ms",
+                                 "key", "modifiers", "code"])
                 for e in self.log:
                     writer.writerow([
                         e["time"].isoformat(),
+                        e["release"].isoformat() if e.get("release") else "",
+                        "%.1f" % e["hold_ms"] if e.get("hold_ms") is not None else "",
                         e["name"],
                         " + ".join(e["mods"]),
                         e["code"],

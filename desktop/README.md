@@ -8,10 +8,15 @@ records keys you press in **any** application.
 It shows:
 
 - a **live** view of the text you type,
-- session **stats** (total keys, characters, keys/min, elapsed time),
+- session **stats** (total keys, characters, keys/min, average hold time,
+  elapsed time),
 - a **most-used keys** breakdown,
-- a timestamped **key log** with modifier keys and key codes,
-- **Pause**, **Clear**, and **Export CSV**.
+- a timestamped **key log** showing, for each key, when it was **pressed**,
+  how long it was **held** (ms), and when it was **released**, plus modifiers,
+- **Pause** / **Resume** — via the button or the global hotkey **Ctrl+Alt+P**
+  (works even when the window isn't focused),
+- **Clear** and **Export CSV** (the CSV includes press time, release time,
+  and hold duration).
 
 Everything stays on your machine. The app never opens a network connection.
 
