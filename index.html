@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrackKeys</title>
+<style>
+  :root {
+    --bg: #14161c;
+    --panel: #1c1f28;
+    --panel-alt: #232734;
+    --border: #333846;
+    --text: #e8e9ee;
+    --text-dim: #9096a8;
+    --accent: #5b8def;
+    --accent-dim: #33405c;
+    --danger: #e35d6a;
+    --success: #4caf7d;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px 16px 64px;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin: 0 0 20px; line-height: 1.5; }
+  section.panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin: 0 0 12px;
+  }
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px rgba(76,175,125,.18);
+    flex: none;
+  }
+  .dot.paused { background: var(--text-dim); box-shadow: 0 0 0 3px rgba(144,150,168,.18); }
+  .dot.unfocused { background: var(--danger); box-shadow: 0 0 0 3px rgba(227,93,106,.18); }
+  .status-text { font-size: 13px; color: var(--text-dim); }
+  .status-text strong { color: var(--text); font-weight: 600; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .stat .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .stat .value {
+    font-size: 24px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .live {
+    min-height: 68px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 15px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .live .caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .live .placeholder { color: var(--text-dim); }
+
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font-family: inherit;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #4a7cd8; }
+  button.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+  .log-wrap {
+    max-height: 340px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel-alt);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    position: sticky; top: 0;
+    background: var(--panel-alt);
+    text-align: left;
+    padding: 9px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    z-index: 1;
+  }
+  tbody td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(51,56,70,.5);
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  .key-chip {
+    display: inline-block;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    background: var(--accent-dim);
+    color: var(--text);
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    min-width: 20px;
+    text-align: center;
+  }
+  .mods { color: var(--text-dim); font-size: 12px; }
+  .empty { padding: 24px 12px; text-align: center; color: var(--text-dim); font-size: 13px; }
+  .col-time { color: var(--text-dim); width: 1%; white-space: nowrap; }
+  .col-code { color: var(--text-dim); font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+
+  .top-keys { display: flex; flex-wrap: wrap; gap: 8px; }
+  .top-key {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .top-key .count { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .note { color: var(--text-dim); font-size: 12px; margin-top: 12px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>TrackKeys</h1>
+  <p class="subtitle">
+    Records the keys you press while this page is focused and shows them below.
+    Keys pressed in other apps or browser tabs are never seen &mdash; a web page can only read its own keyboard input.
+    Nothing leaves your browser.
+  </p>
+
+  <section class="panel">
+    <div class="status-bar">
+      <span class="dot" id="dot"></span>
+      <span class="status-text" id="statusText"><strong>Recording</strong> &mdash; start typing anywhere on this page.</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Total keys</div><div class="value" id="statTotal">0</div></div>
+      <div class="stat"><div class="label">Characters</div><div class="value" id="statChars">0</div></div>
+      <div class="stat"><div class="label">Keys / min</div><div class="value" id="statKpm">0</div></div>
+      <div class="stat"><div class="label">Session time</div><div class="value" id="statTime">0:00</div></div>
+    </div>
+
+    <div class="live" id="live"><span class="placeholder">Typed text appears here&hellip;</span><span class="caret"></span></div>
+  </section>
+
+  <section class="panel">
+    <div class="controls">
+      <button class="primary" id="btnPause">Pause</button>
+      <button id="btnExport">Export log</button>
+      <button class="danger" id="btnClear">Clear</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Most used keys</h2>
+    <div class="top-keys" id="topKeys"><div class="empty" style="padding:0">No keys yet.</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Key log</h2>
+    <div class="log-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-time">Time</th>
+            <th>Key</th>
+            <th>Modifiers</th>
+            <th class="col-code">Code</th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+          <tr><td colspan="4" class="empty">Press any key to begin logging.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The log keeps the most recent 500 keypresses. Use Export to save everything recorded this session as a CSV file.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var MAX_LOG = 500;
+
+  var state = {
+    paused: false,
+    total: 0,
+    chars: 0,
+    log: [],          // {t: Date, key, code, mods[], printable}
+    counts: {},       // display name -> count
+    startTime: Date.now(),
+    typed: ""         // live text buffer
+  };
+
+  var el = {
+    dot: document.getElementById("dot"),
+    statusText: document.getElementById("statusText"),
+    statTotal: document.getElementById("statTotal"),
+    statChars: document.getElementById("statChars"),
+    statKpm: document.getElementById("statKpm"),
+    statTime: document.getElementById("statTime"),
+    live: document.getElementById("live"),
+    topKeys: document.getElementById("topKeys"),
+    logBody: document.getElementById("logBody"),
+    btnPause: document.getElementById("btnPause"),
+    btnExport: document.getElementById("btnExport"),
+    btnClear: document.getElementById("btnClear")
+  };
+
+  // Friendly labels for non-printable keys.
+  var LABELS = {
+    " ": "Space",
+    "ArrowUp": "↑", "ArrowDown": "↓",
+    "ArrowLeft": "←", "ArrowRight": "→",
+    "Enter": "Enter", "Backspace": "Backspace", "Tab": "Tab",
+    "Escape": "Esc", "Delete": "Del", "CapsLock": "Caps"
+  };
+
+  function displayName(key) {
+    if (LABELS[key]) return LABELS[key];
+    if (key.length === 1) return key;
+    return key; // F-keys, Home, End, PageUp, etc.
+  }
+
+  function isPrintable(e) {
+    // Single-character keys that aren't produced with Ctrl/Meta.
+    return e.key.length === 1 && !e.ctrlKey && !e.metaKey;
+  }
+
+  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+
+  function clockStr(d) {
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function render() {
+    el.statTotal.textContent = state.total;
+    el.statChars.textContent = state.chars;
+
+    var elapsedMs = Date.now() - state.startTime;
+    var mins = elapsedMs / 60000;
+    el.statKpm.textContent = mins > 0.02 ? Math.round(state.total / mins) : 0;
+
+    var secs = Math.floor(elapsedMs / 1000);
+    el.statTime.textContent = Math.floor(secs / 60) + ":" + pad2(secs % 60);
+
+    // Live text
+    if (state.typed === "") {
+      el.live.innerHTML = '<span class="placeholder">Typed text appears here&hellip;</span><span class="caret"></span>';
+    } else {
+      el.live.innerHTML = escapeHtml(state.typed) + '<span class="caret"></span>';
+    }
+
+    renderTopKeys();
+    renderLog();
+  }
+
+  function renderTopKeys() {
+    var entries = Object.keys(state.counts).map(function (k) {
+      return [k, state.counts[k]];
+    });
+    if (entries.length === 0) {
+      el.topKeys.innerHTML = '<div class="empty" style="padding:0">No keys yet.</div>';
+      return;
+    }
+    entries.sort(function (a, b) { return b[1] - a[1]; });
+    el.topKeys.innerHTML = entries.slice(0, 12).map(function (e) {
+      return '<div class="top-key"><span class="key-chip">' + escapeHtml(e[0]) +
+        '</span><span class="count">' + e[1] + '</span></div>';
+    }).join("");
+  }
+
+  function renderLog() {
+    if (state.log.length === 0) {
+      el.logBody.innerHTML = '<tr><td colspan="4" class="empty">Press any key to begin logging.</td></tr>';
+      return;
+    }
+    // Most recent first, cap displayed rows for performance.
+    var rows = state.log.slice(-MAX_LOG).reverse();
+    el.logBody.innerHTML = rows.map(function (r) {
+      var mods = r.mods.length ? r.mods.join(" + ") : "—";
+      return "<tr>" +
+        '<td class="col-time">' + clockStr(r.t) + "</td>" +
+        '<td><span class="key-chip">' + escapeHtml(r.name) + "</span></td>" +
+        '<td class="mods">' + escapeHtml(mods) + "</td>" +
+        '<td class="col-code">' + escapeHtml(r.code) + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  function onKeyDown(e) {
+    // Let the browser's own shortcuts (copy, reload, devtools, tab switch) work normally.
+    if (state.paused) return;
+
+    var mods = [];
+    if (e.ctrlKey) mods.push("Ctrl");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey && e.key !== "Shift") mods.push("Shift");
+    if (e.metaKey) mods.push("Meta");
+
+    var name = displayName(e.key);
+
+    var entry = {
+      t: new Date(),
+      name: name,
+      code: e.code || "",
+      mods: mods
+    };
+    state.log.push(entry);
+    if (state.log.length > MAX_LOG) state.log = state.log.slice(-MAX_LOG);
+
+    state.total += 1;
+    state.counts[name] = (state.counts[name] || 0) + 1;
+
+    // Update live text buffer.
+    if (isPrintable(e)) {
+      state.typed += e.key;
+      state.chars += 1;
+    } else if (e.key === "Enter") {
+      state.typed += "\n";
+    } else if (e.key === "Backspace") {
+      state.typed = state.typed.slice(0, -1);
+    } else if (e.key === "Tab") {
+      state.typed += "\t";
+    }
+
+    // Keep the live buffer from growing without bound.
+    if (state.typed.length > 5000) state.typed = state.typed.slice(-5000);
+
+    render();
+  }
+
+  function setPaused(paused) {
+    state.paused = paused;
+    el.btnPause.textContent = paused ? "Resume" : "Pause";
+    el.btnPause.classList.toggle("primary", !paused);
+    updateStatus();
+  }
+
+  function updateStatus(unfocused) {
+    el.dot.className = "dot";
+    if (state.paused) {
+      el.dot.classList.add("paused");
+      el.statusText.innerHTML = "<strong>Paused</strong> &mdash; keys are not being recorded.";
+    } else if (unfocused) {
+      el.dot.classList.add("unfocused");
+      el.statusText.innerHTML = "<strong>Window not focused</strong> &mdash; click this page to resume recording.";
+    } else {
+      el.statusText.innerHTML = "<strong>Recording</strong> &mdash; start typing anywhere on this page.";
+    }
+  }
+
+  function exportCsv() {
+    if (state.log.length === 0) {
+      alert("Nothing to export yet.");
+      return;
+    }
+    var lines = ['"timestamp","key","modifiers","code"'];
+    state.log.forEach(function (r) {
+      var cells = [
+        r.t.toISOString(),
+        r.name,
+        r.mods.join(" + "),
+        r.code
+      ].map(function (v) { return '"' + String(v).replace(/"/g, '""') + '"'; });
+      lines.push(cells.join(","));
+    });
+    var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "trackkeys-" + new Date().toISOString().replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function clearAll() {
+    if (!confirm("Clear the live text, stats and log?")) return;
+    state.total = 0;
+    state.chars = 0;
+    state.log = [];
+    state.counts = {};
+    state.typed = "";
+    state.startTime = Date.now();
+    render();
+  }
+
+  // Events
+  document.addEventListener("keydown", onKeyDown);
+  window.addEventListener("blur", function () { if (!state.paused) updateStatus(true); });
+  window.addEventListener("focus", function () { updateStatus(false); });
+
+  el.btnPause.addEventListener("click", function () { setPaused(!state.paused); });
+  el.btnExport.addEventListener("click", exportCsv);
+  el.btnClear.addEventListener("click", clearAll);
+
+  // Tick the clock / KPM once a second.
+  setInterval(function () { if (!state.paused) render(); }, 1000);
+
+  render();
+})();
+</script>
+</body>
+</html>
