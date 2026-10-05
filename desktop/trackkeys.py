@@ -55,7 +55,7 @@ TEXT_DIM = "#9096a8"
 ACCENT = "#5b8def"
 DANGER = "#e35d6a"
 SUCCESS = "#4caf7d"
-MONO = ("SF Mono", "Menlo", "Consolas", "monospace")
+MONO = ("Consolas", 11)  # family + size; tkinter falls back if absent
 
 MAX_LOG = 2000          # rows retained in memory / shown
 LIVE_LIMIT = 4000       # chars kept in the live buffer
