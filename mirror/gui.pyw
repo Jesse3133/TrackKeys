@@ -163,6 +163,14 @@ class App:
                        command=self._on_headless_toggle, bg=BG, fg=TEXT,
                        selectcolor=PANEL_ALT, activebackground=BG,
                        activeforeground=TEXT, highlightthickness=0,
+                       bd=0).pack(anchor="w")
+
+        self.tray_on_close_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(right, text="Close to tray (keep running)",
+                       variable=self.tray_on_close_var,
+                       command=self._save_settings, bg=BG, fg=TEXT,
+                       selectcolor=PANEL_ALT, activebackground=BG,
+                       activeforeground=TEXT, highlightthickness=0,
                        bd=0).pack(anchor="w", pady=(0, 14))
 
         self.start_btn = tk.Button(right, text="Start Mirroring",
@@ -211,6 +219,7 @@ class App:
         self.headless_var.set(bool(s.get("launch_headless", False)))
         mode = s.get("mouse_mode", "hybrid")
         self.hybrid_var.set(mode != "absolute")
+        self.tray_on_close_var.set(bool(s.get("tray_on_close", False)))
         self.engine.mouse_enabled = self.mouse_var.get()
         self.engine.mouse_mode = mode
         self.engine.launch_type = "headless" if self.headless_var.get() else "gui"
@@ -238,6 +247,7 @@ class App:
             "mouse_enabled": self.mouse_var.get(),
             "mouse_mode": "hybrid" if self.hybrid_var.get() else "absolute",
             "launch_headless": self.headless_var.get(),
+            "tray_on_close": self.tray_on_close_var.get(),
             "window": self.root.winfo_geometry(),
         }
         try:
@@ -443,8 +453,9 @@ class App:
     # -- shutdown ----------------------------------------------------------
     def _on_close(self):
         self._save_settings()
-        if self.tray is not None:
-            # Hide to tray instead of quitting; quit from the tray menu.
+        # Default: the X button fully quits. Only minimize to tray when the
+        # user opted in and the tray is available.
+        if self.tray is not None and self.tray_on_close_var.get():
             self.root.withdraw()
             self._append_log("Minimized to tray. Use the tray icon to restore "
                              "or quit.")

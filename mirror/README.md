@@ -105,10 +105,10 @@ list (optionally headless), and your selections, monitor, and window size are
 
 ## System tray
 
-With `pystray` + `pillow` installed, the app shows a **tray icon**. Closing the
-window **minimizes to the tray** (mirroring keeps running); the tray menu has
-**Show window**, **Start/Stop mirroring**, and **Quit**. Without those packages
-the app still runs — closing the window just quits normally.
+With `pystray` + `pillow` installed, the app shows a **tray icon** with **Show
+window**, **Start/Stop mirroring**, and **Quit**. By default the **X button
+fully quits** the app. Enable **"Close to tray (keep running)"** if you'd rather
+the X minimize to the tray and leave mirroring running in the background.
 
 ## Build a standalone .exe
 
